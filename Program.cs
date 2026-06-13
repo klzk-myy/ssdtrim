@@ -113,61 +113,69 @@ namespace SsdTrim
 
         static bool PerformTrim(string driveLetter, Logger logger)
         {
-            string rootPath = driveLetter + @":\";
-            string tempFile = rootPath + "ssdtrim.tmp";
-
-            DriveInfo drive = new DriveInfo(driveLetter);
-            long freeBytes = drive.AvailableFreeSpace;
-
-            logger.Info("Free space: " + FormatBytes(freeBytes));
-
-            long margin = Math.Max(freeBytes / 100, 256L * 1024 * 1024);
-            long trimSize = freeBytes - margin;
-
-            if (trimSize <= 0)
+            try
             {
-                logger.Error("Not enough free space to perform trim (need at least 256 MB free)");
+                string rootPath = driveLetter + @":\";
+                string tempFile = rootPath + "ssdtrim.tmp";
+
+                DriveInfo drive = new DriveInfo(driveLetter);
+                long freeBytes = drive.AvailableFreeSpace;
+
+                logger.Info("Free space: " + FormatBytes(freeBytes));
+
+                long margin = Math.Max(freeBytes / 100, 256L * 1024 * 1024);
+                long trimSize = freeBytes - margin;
+
+                if (trimSize <= 0)
+                {
+                    logger.Error("Not enough free space to perform trim (need at least 256 MB free)");
+                    return false;
+                }
+
+                logger.Info("Trim size: " + FormatBytes(trimSize));
+                logger.Verbose("Safety margin: " + FormatBytes(margin));
+
+                const int bufferSize = 4 * 1024 * 1024;
+                byte[] zeroBuffer = new byte[bufferSize];
+                long totalWritten = 0;
+
+                logger.Info("Writing zeros to " + tempFile + "...");
+                Stopwatch sw = Stopwatch.StartNew();
+
+                using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize))
+                {
+                    while (totalWritten < trimSize)
+                    {
+                        long remaining = trimSize - totalWritten;
+                        int writeSize = (int)Math.Min(bufferSize, remaining);
+                        fs.Write(zeroBuffer, 0, writeSize);
+                        totalWritten += writeSize;
+                    }
+                    fs.Flush(true);
+                }
+
+                sw.Stop();
+                double seconds = sw.Elapsed.TotalSeconds;
+                double speed = trimSize / (1024.0 * 1024.0) / seconds;
+                logger.Info("Write completed in " + seconds.ToString("F1") + " seconds (" + speed.ToString("F0") + " MB/s)");
+
+                logger.Info("Deleting temporary file to trigger TRIM...");
+                sw = Stopwatch.StartNew();
+
+                File.Delete(tempFile);
+
+                sw.Stop();
+                double deleteMs = sw.Elapsed.TotalMilliseconds;
+                logger.Info("File deleted in " + deleteMs.ToString("F0") + " ms");
+
+                logger.Info("TRIM hints sent for " + FormatBytes(trimSize) + " of free space");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.Error("TRIM failed: " + ex.Message);
                 return false;
             }
-
-            logger.Info("Trim size: " + FormatBytes(trimSize));
-            logger.Verbose("Safety margin: " + FormatBytes(margin));
-
-            int bufferSize = 4 * 1024 * 1024;
-            byte[] zeroBuffer = new byte[bufferSize];
-            long totalWritten = 0;
-
-            logger.Info("Writing zeros to " + tempFile + "...");
-            Stopwatch sw = Stopwatch.StartNew();
-
-            using (FileStream fs = new FileStream(tempFile, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize))
-            {
-                while (totalWritten < trimSize)
-                {
-                    long remaining = trimSize - totalWritten;
-                    int writeSize = (int)Math.Min(bufferSize, remaining);
-                    fs.Write(zeroBuffer, 0, writeSize);
-                    totalWritten += writeSize;
-                }
-                fs.Flush(true);
-            }
-
-            sw.Stop();
-            double seconds = sw.Elapsed.TotalSeconds;
-            double speed = trimSize / (1024.0 * 1024.0) / seconds;
-            logger.Info("Write completed in " + seconds.ToString("F1") + " seconds (" + speed.ToString("F0") + " MB/s)");
-
-            logger.Info("Deleting temporary file to trigger TRIM...");
-            sw = Stopwatch.StartNew();
-
-            File.Delete(tempFile);
-
-            sw.Stop();
-            double deleteMs = sw.Elapsed.TotalMilliseconds;
-            logger.Info("File deleted in " + deleteMs.ToString("F0") + " ms");
-
-            logger.Info("TRIM hints sent for " + FormatBytes(trimSize) + " of free space");
-            return true;
         }
 
         static string FormatBytes(long bytes)
