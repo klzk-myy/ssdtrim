@@ -281,6 +281,14 @@ namespace SsdTrim
             logger.Info("Starting SSD Trim operation");
             logger.Info("Target drive: " + options.DriveLetter + ":");
 
+            if (!Directory.Exists(options.DriveLetter + @":\"))
+            {
+                logger.Error("Drive " + options.DriveLetter + ": does not exist");
+                Environment.ExitCode = 1;
+                return;
+            }
+            logger.Verbose("Drive " + options.DriveLetter + ": exists");
+
             if (!IsAdministrator())
             {
                 logger.Error("This program requires Administrator privileges");
@@ -289,14 +297,6 @@ namespace SsdTrim
                 return;
             }
             logger.Verbose("Administrator privileges confirmed");
-
-            if (!Directory.Exists(options.DriveLetter + @":\"))
-            {
-                logger.Error("Drive " + options.DriveLetter + ": does not exist");
-                Environment.ExitCode = 1;
-                return;
-            }
-            logger.Verbose("Drive " + options.DriveLetter + ": exists");
 
             bool success = PerformTrim(options.DriveLetter, logger);
 
