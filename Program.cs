@@ -34,10 +34,20 @@ namespace SsdTrim
 
         public void Error(string message)
         {
-            Log("ERROR", message);
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            string logLine = "[" + timestamp + "] [ERROR] " + message;
+
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("[ERROR] " + message);
+            Console.WriteLine(logLine);
             Console.ResetColor();
+
+            if (!string.IsNullOrEmpty(_logFile))
+            {
+                lock (_lock)
+                {
+                    File.AppendAllText(_logFile, logLine + Environment.NewLine);
+                }
+            }
         }
 
         private void Log(string level, string message)
