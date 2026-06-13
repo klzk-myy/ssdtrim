@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Principal;
 
 namespace SsdTrim
 {
@@ -70,6 +71,15 @@ namespace SsdTrim
 
     class Program
     {
+        static bool IsAdministrator()
+        {
+            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+            {
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+        }
+
         static TrimOptions ParseArgs(string[] args)
         {
             var options = new TrimOptions();
@@ -210,6 +220,23 @@ namespace SsdTrim
 
             logger.Info("Starting SSD Trim operation");
             logger.Info("Target drive: " + options.DriveLetter + ":");
+
+            if (!IsAdministrator())
+            {
+                logger.Error("This program requires Administrator privileges");
+                logger.Error("Please run as Administrator (right-click -> Run as Administrator)");
+                Environment.ExitCode = 1;
+                return;
+            }
+            logger.Verbose("Administrator privileges confirmed");
+
+            if (!Directory.Exists(options.DriveLetter + @":\"))
+            {
+                logger.Error("Drive " + options.DriveLetter + ": does not exist");
+                Environment.ExitCode = 1;
+                return;
+            }
+            logger.Verbose("Drive " + options.DriveLetter + ": exists");
 
             bool success = PerformTrim(options.DriveLetter, logger);
 
