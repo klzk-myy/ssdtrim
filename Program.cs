@@ -10,6 +10,7 @@ namespace SsdTrim
         public string DriveLetter { get; set; }
         public bool Verbose { get; set; }
         public string LogFile { get; set; }
+        public bool StatusOnly { get; set; }
     }
 
     class Logger
@@ -107,6 +108,9 @@ namespace SsdTrim
                     case "-verbose":
                         options.Verbose = true;
                         break;
+                    case "-status":
+                        options.StatusOnly = true;
+                        break;
                     case "-log":
                         if (i + 1 < args.Length)
                             options.LogFile = args[++i];
@@ -201,18 +205,74 @@ namespace SsdTrim
             return size.ToString("F2") + " " + suffixes[order];
         }
 
+        static bool CheckTrimStatus(Logger logger)
+        {
+            logger.Info("Checking TRIM status via fsutil...");
+
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = "fsutil",
+                    Arguments = "behavior query DisableDeleteNotify",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+
+                    logger.Verbose("fsutil output: " + output.Trim());
+
+                    if (output.Contains("DisableDeleteNotify = 0"))
+                    {
+                        logger.Info("TRIM is ENABLED (DisableDeleteNotify = 0)");
+                        return true;
+                    }
+                    else if (output.Contains("DisableDeleteNotify = 1"))
+                    {
+                        logger.Info("TRIM is DISABLED (DisableDeleteNotify = 1)");
+                        logger.Info("Enable with: fsutil behavior set DisableDeleteNotify 0");
+                        return false;
+                    }
+                    else
+                    {
+                        logger.Info("TRIM status: not explicitly set (auto-enabled for SSDs)");
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error("Failed to query TRIM status: " + ex.Message);
+                return false;
+            }
+        }
+
         static void Main(string[] args)
         {
             var options = ParseArgs(args);
             var logger = new Logger(options.Verbose, options.LogFile);
 
+            if (options.StatusOnly)
+            {
+                CheckTrimStatus(logger);
+                Environment.ExitCode = 0;
+                return;
+            }
+
             if (string.IsNullOrEmpty(options.DriveLetter))
             {
                 Console.WriteLine("SSD Trim Tool for Windows 7");
                 Console.WriteLine("Usage: SsdTrim.exe -drive C: [-verbose] [-log path]");
+                Console.WriteLine("       SsdTrim.exe -status [-verbose] [-log path]");
                 Console.WriteLine();
                 Console.WriteLine("Options:");
-                Console.WriteLine("  -drive   Drive letter (required, e.g. C)");
+                Console.WriteLine("  -drive   Drive letter (required for trim, e.g. C)");
+                Console.WriteLine("  -status  Query TRIM status only");
                 Console.WriteLine("  -verbose Enable verbose output");
                 Console.WriteLine("  -log     Log file path");
                 return;
