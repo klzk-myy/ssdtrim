@@ -10,6 +10,53 @@ namespace SsdTrim
         public string LogFile { get; set; }
     }
 
+    class Logger
+    {
+        private readonly bool _verbose;
+        private readonly string _logFile;
+        private readonly object _lock = new object();
+
+        public Logger(bool verbose, string logFile)
+        {
+            _verbose = verbose;
+            _logFile = logFile;
+        }
+
+        public void Info(string message)
+        {
+            Log("INFO", message);
+        }
+
+        public void Verbose(string message)
+        {
+            if (_verbose) Log("DEBUG", message);
+        }
+
+        public void Error(string message)
+        {
+            Log("ERROR", message);
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("[ERROR] " + message);
+            Console.ResetColor();
+        }
+
+        private void Log(string level, string message)
+        {
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            string logLine = "[" + timestamp + "] [" + level + "] " + message;
+
+            Console.WriteLine(logLine);
+
+            if (!string.IsNullOrEmpty(_logFile))
+            {
+                lock (_lock)
+                {
+                    File.AppendAllText(_logFile, logLine + Environment.NewLine);
+                }
+            }
+        }
+    }
+
     class Program
     {
         static TrimOptions ParseArgs(string[] args)
@@ -56,6 +103,7 @@ namespace SsdTrim
         static void Main(string[] args)
         {
             var options = ParseArgs(args);
+            var logger = new Logger(options.Verbose, options.LogFile);
 
             if (string.IsNullOrEmpty(options.DriveLetter))
             {
@@ -69,9 +117,10 @@ namespace SsdTrim
                 return;
             }
 
-            Console.WriteLine("Target drive: " + options.DriveLetter + ":");
-            if (options.Verbose) Console.WriteLine("Verbose mode: enabled");
-            if (!string.IsNullOrEmpty(options.LogFile)) Console.WriteLine("Log file: " + options.LogFile);
+            logger.Info("Starting SSD Trim operation");
+            logger.Info("Target drive: " + options.DriveLetter + ":");
+            logger.Verbose("Verbose mode enabled");
+            logger.Verbose("Log file: " + (options.LogFile ?? "none"));
         }
     }
 }
